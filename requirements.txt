@@ -1,0 +1,16 @@
+# env: rnd
+# for counting can lids version 2
+numpy
+opencv-python
+paddleocr
+paddlepaddle
+requests
+scikit-learn
+ultralytics
+roboflow
+fastapi
+redis
+types-redis
+uvicorn
+pillow
+uuid
