@@ -1,13 +1,13 @@
+import json
 import math
 import os
 import uuid
+from typing import Dict, List
 
 import cv2
 import numpy as np
 from sklearn.linear_model import LinearRegression
 from ultralytics import YOLO
-from typing import List, Dict
-
 
 # Configuration for can-lid grouping
 PRODUCT_HOR_MULTIPLIER = 0.3
@@ -17,14 +17,17 @@ VERT_VARIATION = 0.3
 DYNAMIC_CL0_BASE = 80
 SLOPE = 0.05
 
+
 # Helper functions for grouping
 ##########################################################################################################
 def get_dynamic_multiplier(avg_height):
     multiplier = 1.5 - SLOPE * (avg_height - DYNAMIC_CL0_BASE)
     return max(multiplier, 1.5)
 
+
 def euclidean_distance(x1, y1, x2, y2):
     return math.hypot(x2 - x1, y2 - y1)
+
 
 def compute_average_dimensions(lids):
     if not lids:
@@ -32,6 +35,7 @@ def compute_average_dimensions(lids):
     widths = [c["x2"] - c["x1"] for c in lids]
     heights = [c["y2"] - c["y1"] for c in lids]
     return sum(widths) / len(widths), sum(heights) / len(heights)
+
 
 def fit_line_sklearn(points):
     if len(points) < 2:
@@ -46,6 +50,7 @@ def fit_line_sklearn(points):
     model = LinearRegression().fit(X, y)
     return model.coef_[0], model.intercept_
 
+
 def draw_box(image, x1, y1, x2, y2, color, thickness=2, label=None):
     cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), color, thickness)
     if label:
@@ -58,7 +63,10 @@ def draw_box(image, x1, y1, x2, y2, color, thickness=2, label=None):
             color,
             2,
         )
+
+
 ########################################################################################################
+
 
 class CanCounter:
     """
@@ -256,7 +264,9 @@ class CanCounter:
 
 
 class ChillerBrandPipeline:
-    def __init__(self, chiller_cls_model_path, shape_seg_model_path, brand_cls_model_path):
+    def __init__(
+        self, chiller_cls_model_path, shape_seg_model_path, brand_cls_model_path
+    ):
         self.chiller_model = YOLO(chiller_cls_model_path)
         self.seg_model = YOLO(shape_seg_model_path)
         self.brand_model = YOLO(brand_cls_model_path)
@@ -269,16 +279,20 @@ class ChillerBrandPipeline:
         return pred_name.lower() == "chiller"
 
     def seg_to_bboxes(self, image_np: np.ndarray, conf=0.25) -> List[Dict]:
-        result = self.seg_model.predict(source=image_np, conf=conf, task='segment')[0]
+        result = self.seg_model.predict(source=image_np, conf=conf, task="segment")[0]
         boxes = []
-        for box, cls_id, score in zip(result.boxes.xyxy, result.boxes.cls, result.boxes.conf):
+        for box, cls_id, score in zip(
+            result.boxes.xyxy, result.boxes.cls, result.boxes.conf
+        ):
             x1, y1, x2, y2 = map(int, box.tolist())
-            boxes.append({
-                "id": str(uuid.uuid4()),
-                "class_id": int(cls_id),
-                "score": float(score),
-                "box": {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
-            })
+            boxes.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "class_id": int(cls_id),
+                    "score": float(score),
+                    "box": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+                }
+            )
         return boxes
 
     def filter_large(self, boxes: List[Dict], min_area: int) -> List[Dict]:
@@ -290,12 +304,14 @@ class ChillerBrandPipeline:
                 large.append(box)
         return large
 
-    def crop_and_save(self, image_np: np.ndarray, boxes: List[Dict], out_dir="temp_cropped") -> List[Dict]:
+    def crop_and_save(
+        self, image_np: np.ndarray, boxes: List[Dict], out_dir="temp_cropped"
+    ) -> List[Dict]:
         os.makedirs(out_dir, exist_ok=True)
         crops = []
         for box in boxes:
             coords = box["box"]
-            crop = image_np[coords["y1"]:coords["y2"], coords["x1"]:coords["x2"]]
+            crop = image_np[coords["y1"] : coords["y2"], coords["x1"] : coords["x2"]]
             filename = f"{uuid.uuid4()}.jpg"
             filepath = os.path.join(out_dir, filename)
             cv2.imwrite(filepath, crop[..., ::-1])  # convert RGB to BGR
@@ -327,8 +343,5 @@ class ChillerBrandPipeline:
             return json.load(f)
 
     def run_counter(self, cans: List[Dict], brands: List[Dict]) -> Dict:
-        data = {
-            "product": {"prediction": brands},
-            "canlids": {"prediction": cans}
-        }
+        data = {"product": {"prediction": brands}, "canlids": {"prediction": cans}}
         return self.can_counter.count(data, is_debug=False)
